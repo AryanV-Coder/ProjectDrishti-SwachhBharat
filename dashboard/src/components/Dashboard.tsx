@@ -1,104 +1,54 @@
 import React, { useState, useEffect } from 'react';
-import { Person, DashboardStats } from '../types';
-import { fetchPeople, fetchStats } from '../data/mockData';
-import PersonCard from './PersonCard';
-import PersonDetailsModal from './PersonDetailsModal';
-import { Shield, Users, IndianRupee, AlertTriangle } from 'lucide-react';
+import { mockPeople, mockStats } from '../data/mockData';
 
-const Dashboard: React.FC = () => {
-  const [people, setPeople] = useState<Person[]>([]);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
+const Dashboard = () => {
+  const [people, setPeople] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
+  const [selectedPerson, setSelectedPerson] = useState<any>(null);
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const [peopleData, statsData] = await Promise.all([
-          fetchPeople(),
-          fetchStats()
-        ]);
-        setPeople(peopleData);
-        setStats(statsData);
-      } catch (error) {
-        console.error('Error loading data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
+    // Load data 
+    setPeople(mockPeople);
+    setStats(mockStats);
   }, []);
 
-  const handlePersonClick = (person: Person) => {
+  const openModal = (person: any) => {
     setSelectedPerson(person);
-    setIsModalOpen(true);
+    setShowModal(true);
   };
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
+  const closeModal = () => {
+    setShowModal(false);
     setSelectedPerson(null);
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-    }).format(amount);
+  const formatMoney = (amount: number) => {
+    return `₹${amount.toLocaleString()}`;
   };
 
-  if (loading) {
-    return (
-      <div className="app">
-        <div className="loading">
-          <Shield size={48} style={{ marginBottom: '1rem' }} />
-          <h2>Loading SwachhBharat Dashboard...</h2>
-        </div>
-      </div>
-    );
-  }
+  const formatDate = (date: any) => {
+    return new Date(date).toLocaleDateString('en-IN');
+  };
 
   return (
     <div className="app">
       <header className="header">
         <div className="header-content">
-          <h1>
-            <Shield size={24} />
-            SwachhBharat Monitoring System
-          </h1>
-          
+          <h1>Swachh Bharat Dashboard</h1>
           {stats && (
             <div className="header-stats">
               <div className="stat-item">
-                <div className="stat-number">
-                  <Users size={20} style={{ display: 'inline', marginRight: '0.5rem' }} />
-                  {stats.totalPeople}
-                </div>
-                <div className="stat-label">Total People</div>
+                <div className="stat-number">{stats.totalPeople}</div>
+                <div className="stat-label">People</div>
               </div>
-              
               <div className="stat-item">
-                <div className="stat-number">
-                  <AlertTriangle size={20} style={{ display: 'inline', marginRight: '0.5rem' }} />
-                  {stats.totalFines}
-                </div>
-                <div className="stat-label">Total Fines</div>
+                <div className="stat-number">{stats.totalFines}</div>
+                <div className="stat-label">Fines</div>
               </div>
-              
               <div className="stat-item">
-                <div className="stat-number">
-                  <IndianRupee size={20} style={{ display: 'inline', marginRight: '0.5rem' }} />
-                  {formatCurrency(stats.totalAmount).replace('₹', '')}
-                </div>
+                <div className="stat-number">{formatMoney(stats.totalAmount)}</div>
                 <div className="stat-label">Total Amount</div>
-              </div>
-              
-              <div className="stat-item">
-                <div className="stat-number">{stats.todayFines}</div>
-                <div className="stat-label">Today's Fines</div>
               </div>
             </div>
           )}
@@ -106,32 +56,86 @@ const Dashboard: React.FC = () => {
       </header>
 
       <main className="main-content">
-        <h2 className="dashboard-title">People with Imposed Fines</h2>
+        <h2 className="dashboard-title">Fined People</h2>
         
-        {people.length > 0 ? (
-          <div className="people-grid">
-            {people.map((person) => (
-              <PersonCard
-                key={person.id}
-                person={person}
-                onClick={handlePersonClick}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="no-data">
-            <Shield size={48} style={{ marginBottom: '1rem' }} />
-            <h3>No fines recorded</h3>
-            <p>The system is monitoring, but no violations have been detected yet.</p>
-          </div>
-        )}
+        <div className="people-grid">
+          {people.map((person) => (
+            <div key={person.id} className="person-card" onClick={() => openModal(person)}>
+              <div className="person-header">
+                <div className="person-name">{person.name}</div>
+                <div className="fine-count">{person.fineCount} fines</div>
+              </div>
+              <div className="person-details">
+                <div className="detail-row">
+                  <span className="detail-label">Total:</span>
+                  <span className="detail-value total-amount">{formatMoney(person.totalAmount)}</span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">Last incident:</span>
+                  <span className="detail-value">{formatDate(person.lastIncidentDate)}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </main>
 
-      <PersonDetailsModal
-        person={selectedPerson}
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-      />
+      {showModal && selectedPerson && (
+        <div className="modal-overlay" onClick={closeModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">{selectedPerson.name} - Fine Details</h2>
+              <button className="close-button" onClick={closeModal}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="person-summary">
+                <div className="detail-row">
+                  <span className="detail-label">Total Fines:</span>
+                  <span className="detail-value">{selectedPerson.fineCount}</span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">Total Amount:</span>
+                  <span className="detail-value total-amount">{formatMoney(selectedPerson.totalAmount)}</span>
+                </div>
+              </div>
+              
+              <h3>Fine History</h3>
+              <div className="fines-list">
+                {selectedPerson.fines.map((fine: any) => (
+                  <div key={fine.id} className="fine-item">
+                    <div className="fine-header">
+                      <span className="fine-type">{fine.type.toUpperCase()}</span>
+                      <span className="fine-amount">{formatMoney(fine.amount)}</span>
+                    </div>
+                    <div className="fine-details">
+                      <div className="detail-row">
+                        <span className="detail-label">Date:</span>
+                        <span className="detail-value">{formatDate(fine.date)}</span>
+                      </div>
+                      <div className="detail-row">
+                        <span className="detail-label">Status:</span>
+                        <span className="detail-value">{fine.status}</span>
+                      </div>
+                      <div className="detail-row">
+                        <span className="detail-label">Location:</span>
+                        <span className="detail-value">{fine.location}</span>
+                      </div>
+                    </div>
+                    <p>{fine.description}</p>
+                    {fine.incidentPhotos.length > 0 && (
+                      <div className="incident-photos">
+                        {fine.incidentPhotos.map((photo: any) => (
+                          <img key={photo.id} src={photo.url} alt="Evidence" className="incident-photo" />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
