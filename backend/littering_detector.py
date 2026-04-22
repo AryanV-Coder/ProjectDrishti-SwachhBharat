@@ -80,6 +80,10 @@ class LitteringDetector:
         self.garbage_states: Dict[int, GarbageState] = {}
         self.confirmed_events: List[LitteringEvent] = []
 
+        # Memory of recently-lost garbage states (for ID reassignment on drops)
+        # Each entry: {"state": GarbageState, "last_centroid": (cx,cy), "frames_since_lost": int}
+        self.recently_lost: List[dict] = []
+
         # Load thresholds from config
         self.proximity_threshold = config.PROXIMITY_THRESHOLD
         self.separation_threshold = config.SEPARATION_THRESHOLD
@@ -87,6 +91,7 @@ class LitteringDetector:
         self.stationary_frames = config.STATIONARY_FRAMES
         self.moving_away_frames = config.PERSON_MOVING_AWAY_FRAMES
         self.dustbin_proximity = config.DUSTBIN_PROXIMITY
+        self.state_memory_frames = config.GARBAGE_STATE_MEMORY_FRAMES
 
     def update(
         self,
@@ -108,16 +113,40 @@ class LitteringDetector:
         new_events = []
         active_garbage_ids = set(tracked_garbage.keys())
 
-        # Clean up states for garbage that's no longer tracked
+        # Save states of garbage that just disappeared (for state inheritance)
         stale_ids = [gid for gid in self.garbage_states if gid not in active_garbage_ids]
         for gid in stale_ids:
+            lost_state = self.garbage_states[gid]
+            # Only remember if it had a meaningful state (was attached to someone)
+            if lost_state.state != GarbageStateEnum.UNTRACKED and lost_state.associated_person_id is not None:
+                last_centroid = lost_state.position_history[-1] if lost_state.position_history else None
+                if last_centroid:
+                    self.recently_lost.append({
+                        "state": lost_state,
+                        "last_centroid": last_centroid,
+                        "frames_since_lost": 0,
+                    })
+                    if config.LOG_STATE_TRANSITIONS:
+                        print(
+                            f"[Littering] Garbage #{gid} lost from tracking — "
+                            f"remembering state {lost_state.state.value} "
+                            f"(person #{lost_state.associated_person_id})"
+                        )
             del self.garbage_states[gid]
+
+        # Age out old memories
+        for mem in self.recently_lost:
+            mem["frames_since_lost"] += 1
+        self.recently_lost = [m for m in self.recently_lost if m["frames_since_lost"] <= self.state_memory_frames]
 
         # Process each garbage object
         for garbage_id, garbage_obj in tracked_garbage.items():
             # Initialize state if new
             if garbage_id not in self.garbage_states:
-                self.garbage_states[garbage_id] = GarbageState(garbage_id=garbage_id)
+                # Check if this new garbage matches a recently-lost one
+                inherited = self._try_inherit_state(garbage_id, garbage_obj, tracked_persons)
+                if not inherited:
+                    self.garbage_states[garbage_id] = GarbageState(garbage_id=garbage_id)
 
             state = self.garbage_states[garbage_id]
 
@@ -265,6 +294,79 @@ class LitteringDetector:
 
         return total_dist / (len(recent) - 1)
 
+    def _try_inherit_state(
+        self,
+        new_garbage_id: int,
+        garbage_obj: TrackedObject,
+        tracked_persons: Dict[int, TrackedObject],
+    ) -> bool:
+        """
+        Check if a newly-appeared garbage object matches a recently-lost one.
+        If so, inherit the old state (this handles YOLO losing detection during drops).
+        
+        Match criteria:
+        - The lost garbage was attached to a person
+        - The new garbage appeared near that same person OR near the old position
+        """
+        if not self.recently_lost:
+            return False
+
+        best_match = None
+        best_dist = float("inf")
+
+        for mem in self.recently_lost:
+            old_state = mem["state"]
+            old_centroid = mem["last_centroid"]
+            old_person_id = old_state.associated_person_id
+
+            # Distance between new garbage and old garbage's last position
+            dist_to_old = euclidean_distance(garbage_obj.centroid, old_centroid)
+
+            # Also check if new garbage is near the same person
+            near_same_person = False
+            if old_person_id is not None and old_person_id in tracked_persons:
+                person_centroid = tracked_persons[old_person_id].centroid
+                dist_to_person = euclidean_distance(garbage_obj.centroid, person_centroid)
+                near_same_person = dist_to_person < self.proximity_threshold * 2
+
+            # Match if close to old position OR near the same person
+            if dist_to_old < config.GARBAGE_MAX_TRACKING_DISTANCE or near_same_person:
+                if dist_to_old < best_dist:
+                    best_dist = dist_to_old
+                    best_match = mem
+
+        if best_match:
+            old_state = best_match["state"]
+
+            # Create new state inheriting from the old one
+            new_state = GarbageState(garbage_id=new_garbage_id)
+            new_state.associated_person_id = old_state.associated_person_id
+            new_state.person_last_bbox = old_state.person_last_bbox
+
+            # If the old garbage was ATTACHED or DETACHING, the new one starts as DETACHING
+            # (the drop just happened — the garbage separated from the person)
+            if old_state.state in (GarbageStateEnum.ATTACHED, GarbageStateEnum.DETACHING):
+                new_state.state = GarbageStateEnum.DETACHING
+                new_state.stationary_count = old_state.stationary_count
+            elif old_state.state == GarbageStateEnum.MONITORING:
+                new_state.state = GarbageStateEnum.MONITORING
+                new_state.separation_count = old_state.separation_count
+            else:
+                new_state.state = old_state.state
+
+            self.garbage_states[new_garbage_id] = new_state
+            self.recently_lost.remove(best_match)
+
+            if config.LOG_STATE_TRANSITIONS:
+                print(
+                    f"[Littering] Garbage #{new_garbage_id} inherited state from "
+                    f"lost Garbage #{old_state.garbage_id}: {new_state.state.value} "
+                    f"(person #{new_state.associated_person_id})"
+                )
+            return True
+
+        return False
+
     def get_active_states(self) -> Dict[int, str]:
         """Return current states for all tracked garbage (for display)."""
         return {gid: gs.state.value for gid, gs in self.garbage_states.items()}
@@ -273,3 +375,4 @@ class LitteringDetector:
         """Clear all states."""
         self.garbage_states.clear()
         self.confirmed_events.clear()
+        self.recently_lost.clear()

@@ -15,7 +15,7 @@ import cv2
 import sys
 
 from detector import ObjectDetector
-from spatial_analyzer import euclidean_distance, find_nearest_person, is_near_dustbin
+from spatial_analyzer import find_nearest_person, is_near_dustbin
 from tracker import TrackedObject
 import config
 

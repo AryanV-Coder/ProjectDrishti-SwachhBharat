@@ -4,7 +4,7 @@ Assigns persistent IDs to detections across frames using nearest-centroid matchi
 """
 
 from collections import OrderedDict
-from typing import Dict, List, Tuple
+from typing import Dict, List
 from scipy.spatial import distance as dist
 import numpy as np
 

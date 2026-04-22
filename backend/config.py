@@ -6,6 +6,7 @@ All tunable thresholds and settings are centralized here.
 # ─── YOLO Model Settings ───────────────────────────────────────────────
 YOLO_MODEL_PATH = "best.pt"          # Path to YOLO model weights (relative to backend/)
 YOLO_CONFIDENCE = 0.5                # Minimum detection confidence threshold
+YOLO_PERSON_CONFIDENCE = 0.8         # Higher threshold for person detection (reduce false positives)
 YOLO_IOU_THRESHOLD = 0.45           # NMS IoU threshold for YOLO
 YOLO_IMG_SIZE = 320                  # Input resolution for YOLO (lower = faster, 320/416/640)
 
@@ -20,8 +21,14 @@ CLASS_NAMES = {
 FRAME_SAMPLE_RATE = 5               # Process every Nth frame (1 = every frame, higher = faster)
 
 # ─── Tracker Settings ──────────────────────────────────────────────────
-MAX_DISAPPEARED_FRAMES = 15         # Frames before an object is deregistered
-MAX_TRACKING_DISTANCE = 200         # Max pixel distance for centroid matching
+MAX_DISAPPEARED_FRAMES = 15         # Frames before a person is deregistered
+MAX_TRACKING_DISTANCE = 200         # Max pixel distance for person centroid matching
+
+# Garbage tracker needs higher tolerance — YOLO often loses detection
+# during the drop action (motion blur, bounding box shape change)
+GARBAGE_MAX_DISAPPEARED = 25        # Garbage can vanish for longer before deregistering
+GARBAGE_MAX_TRACKING_DISTANCE = 250 # Larger matching radius for garbage (centroid shifts on drop)
+GARBAGE_STATE_MEMORY_FRAMES = 20    # Remember recently-lost garbage states for this many frames
 
 # ─── Spatial Analysis Thresholds ────────────────────────────────────────
 PROXIMITY_THRESHOLD = 150           # Max distance (px) to consider person-garbage "attached"

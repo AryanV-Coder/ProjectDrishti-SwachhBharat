@@ -5,12 +5,18 @@ Orchestrates: Frame → Detection → Tracking → Spatial Analysis → Litterin
 
 import cv2
 import numpy as np
-from typing import Dict, List, Tuple
+import os
+import time as time_module
+from typing import Dict, List
 
-from detector import ObjectDetector, Detection
+from detector import ObjectDetector
 from tracker import CentroidTracker, TrackedObject
 from littering_detector import LitteringDetector, LitteringEvent
 import config
+
+# Create output folder for garbage evidence
+GARBAGE_OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "garbage_detected")
+os.makedirs(GARBAGE_OUTPUT_DIR, exist_ok=True)
 
 
 class LitteringPipeline:
@@ -27,7 +33,10 @@ class LitteringPipeline:
         # Initialize components
         self.detector = ObjectDetector(model_path=model_path)
         self.person_tracker = CentroidTracker()
-        self.garbage_tracker = CentroidTracker()
+        self.garbage_tracker = CentroidTracker(
+            max_disappeared=config.GARBAGE_MAX_DISAPPEARED,
+            max_distance=config.GARBAGE_MAX_TRACKING_DISTANCE,
+        )
         self.dustbin_tracker = CentroidTracker()
         self.littering_detector = LitteringDetector()
 
@@ -63,6 +72,9 @@ class LitteringPipeline:
         garbage_dets = self.detector.filter_by_class(detections, config.CLASS_NAMES["garbage"])
         dustbin_dets = self.detector.filter_by_class(detections, config.CLASS_NAMES["dustbin"])
 
+        # Apply stricter confidence threshold for persons
+        person_dets = [d for d in person_dets if d.confidence >= config.YOLO_PERSON_CONFIDENCE]
+
         # 3. Update trackers
         self.tracked_persons = self.person_tracker.update(person_dets)
         self.tracked_garbage = self.garbage_tracker.update(garbage_dets)
@@ -77,7 +89,36 @@ class LitteringPipeline:
 
         self.all_events.extend(self.latest_events)
 
+        # 5. Save cropped garbage images for confirmed events
+        if self.latest_events:
+            self._save_garbage_crops(frame, self.latest_events)
+
         return self.latest_events
+
+    def _save_garbage_crops(self, frame, events: List[LitteringEvent]):
+        """Save cropped garbage region from the frame for each confirmed event."""
+        h, w = frame.shape[:2]
+        padding = 20  # Extra pixels around the bounding box
+
+        for event in events:
+            x1, y1, x2, y2 = event.garbage_bbox
+
+            # Add padding and clamp to frame bounds
+            x1 = max(0, x1 - padding)
+            y1 = max(0, y1 - padding)
+            x2 = min(w, x2 + padding)
+            y2 = min(h, y2 + padding)
+
+            crop = frame[y1:y2, x1:x2]
+            if crop.size == 0:
+                continue
+
+            timestamp = time_module.strftime("%Y%m%d_%H%M%S", time_module.localtime(event.timestamp))
+            filename = f"garbage_person{event.person_id}_g{event.garbage_id}_{timestamp}.jpg"
+            filepath = os.path.join(GARBAGE_OUTPUT_DIR, filename)
+
+            cv2.imwrite(filepath, crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            print(f"[Pipeline] Garbage evidence saved: {filepath}")
 
     def draw_annotations(self, frame) -> np.ndarray:
         """
