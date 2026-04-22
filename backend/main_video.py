@@ -97,10 +97,15 @@ def main():
                 writer.write(annotated)
 
             if show_display:
+                display = annotated
                 if config.DISPLAY_WIDTH > 0 and config.DISPLAY_HEIGHT > 0:
-                    display = cv2.resize(annotated, (config.DISPLAY_WIDTH, config.DISPLAY_HEIGHT))
-                else:
-                    display = annotated
+                    # Resize preserving aspect ratio (fit within display bounds)
+                    ah, aw = annotated.shape[:2]
+                    scale = min(config.DISPLAY_WIDTH / aw, config.DISPLAY_HEIGHT / ah)
+                    if scale < 1.0:  # Only downscale, never upscale
+                        new_w = int(aw * scale)
+                        new_h = int(ah * scale)
+                        display = cv2.resize(annotated, (new_w, new_h))
                 cv2.imshow("Littering Detection - Video", display)
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord("q"):
