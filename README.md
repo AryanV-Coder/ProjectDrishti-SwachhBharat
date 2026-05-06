@@ -65,18 +65,18 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    subgraph UPLOAD["📂 data_to_upload/"]
-        FOLDER["Person Folder"] --> JSON["details.json<br>(name, email)"]
-        FOLDER --> PHOTOS["Face Photos<br>(.jpg, .png)"]
+    subgraph UPLOAD["data_to_upload"]
+        FOLDER["Person Folder"] --> JSON["details.json"]
+        FOLDER --> PHOTOS["Face Photos"]
     end
 
-    subgraph PROCESSING["⚙️ self_data_upload.py"]
-        JSON -->|"Parse"| SQLINSERT["SQLite: Insert Person"]
-        SQLINSERT -->|"person_id"| LINK["Link IDs"]
-        PHOTOS -->|"DeepFace"| EMBED["Extract 512D Embedding"]
-        EMBED -->|"L2 Normalize"| FAISSADD["FAISS: Add with custom ID"]
-        FAISSADD -->|"faiss_id"| LINK
-        LINK --> BRIDGE["SQLite: face_embeddings_id Table"]
+    subgraph PROCESSING["self_data_upload.py"]
+        JSON -->|Parse| SQLINSERT["SQLite: Insert Person"]
+        SQLINSERT -->|person_id| LINK["Link IDs"]
+        PHOTOS -->|DeepFace| EMBED["Extract 512D Embedding"]
+        EMBED -->|L2 Normalize| FAISSADD["FAISS: Add with custom ID"]
+        FAISSADD -->|faiss_id| LINK
+        LINK --> BRIDGE["SQLite: face_embeddings_id"]
     end
 ```
 
@@ -84,21 +84,21 @@ flowchart LR
 
 ```mermaid
 erDiagram
-    persons ||--o{ face_embeddings_id : "has"
+    persons ||--o{ face_embeddings_id : has
     persons {
-        int person_id PK "AUTO INCREMENT"
-        text name "NOT NULL"
-        text email "NOT NULL"
+        int person_id PK
+        text name
+        text email
     }
     face_embeddings_id {
-        int faiss_id PK "Custom ID"
-        int person_id FK "References persons"
+        int faiss_id PK
+        int person_id FK
     }
     FAISS_INDEX {
-        int faiss_id "Custom ID"
-        float_array embedding "512-dim vector"
+        int faiss_id
+        blob embedding
     }
-    face_embeddings_id ||--|| FAISS_INDEX : "maps to"
+    face_embeddings_id ||--|| FAISS_INDEX : maps_to
 ```
 
 ### State Machine Transitions
@@ -109,14 +109,10 @@ stateDiagram-v2
     UNTRACKED --> ATTACHED : Person near garbage
     ATTACHED --> DETACHING : Distance increasing
     DETACHING --> ATTACHED : Person picks it back up
-    DETACHING --> MONITORING : Garbage stationary for N frames
+    DETACHING --> MONITORING : Garbage stationary N frames
     MONITORING --> DETACHING : Garbage moves again
-    MONITORING --> LITTERING_CONFIRMED : Person far away for N frames
+    MONITORING --> LITTERING_CONFIRMED : Person far away N frames
     LITTERING_CONFIRMED --> [*]
-
-    note right of ATTACHED : Garbage is being held by a person
-    note right of MONITORING : Watching if person returns
-    note right of LITTERING_CONFIRMED : Triggers evidence + recognition + email
 ```
 
 ---
