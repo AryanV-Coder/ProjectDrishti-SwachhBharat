@@ -3,12 +3,28 @@ Configuration parameters for the Littering Detection System.
 All tunable thresholds and settings are centralized here.
 """
 
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
 # ─── YOLO Model Settings ───────────────────────────────────────────────
 YOLO_MODEL_PATH = "best.pt"          # Path to YOLO model weights (relative to backend/)
-YOLO_CONFIDENCE = 0.5                # Minimum detection confidence threshold
-YOLO_PERSON_CONFIDENCE = 0.8         # Higher threshold for person detection (reduce false positives)
+YOLO_CONFIDENCE = 0.50                # Minimum detection confidence threshold
+YOLO_PERSON_CONFIDENCE = 0.80         # Higher threshold for person detection (reduce false positives)
 YOLO_IOU_THRESHOLD = 0.45           # NMS IoU threshold for YOLO
 YOLO_IMG_SIZE = 320                  # Input resolution for YOLO (lower = faster, 320/416/640)
+
+# ─── File Paths & Credentials ─────────────────────────────────────────
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SQLITE_DB_PATH = os.path.join(BASE_DIR, "face_database.db")
+FAISS_INDEX_PATH = os.path.join(BASE_DIR, "face_index.faiss")
+
+SMTP_EMAIL = os.getenv("SMTP_EMAIL", "")
+SMTP_APP_PASSWORD = os.getenv("SMTP_APP_PASSWORD", "")
+
+FACE_SIMILARITY_THRESHOLD = 0.60    # Cosine similarity threshold for FAISS matching
 
 # ─── Class Names (must match your YOLO model's training labels) ─────
 CLASS_NAMES = {

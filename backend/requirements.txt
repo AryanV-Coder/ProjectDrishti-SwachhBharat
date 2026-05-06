@@ -7,3 +7,6 @@ ultralytics
 numpy<2
 scipy
 mediapipe
+deepface
+faiss-cpu
+python-dotenv

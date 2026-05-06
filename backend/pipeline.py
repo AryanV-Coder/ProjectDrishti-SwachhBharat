@@ -15,6 +15,7 @@ from detector import ObjectDetector
 from tracker import CentroidTracker, TrackedObject
 from littering_detector import LitteringDetector, LitteringEvent
 import config
+from utils import deepface_recognition, sqlite_db, emailer
 
 # Create output folders
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -22,6 +23,9 @@ GARBAGE_OUTPUT_DIR = os.path.join(BASE_DIR, "garbage_detected")
 VIOLATION_OUTPUT_DIR = os.path.join(BASE_DIR, "violation")
 os.makedirs(GARBAGE_OUTPUT_DIR, exist_ok=True)
 os.makedirs(VIOLATION_OUTPUT_DIR, exist_ok=True)
+
+# Ensure DB is initialized before pipeline starts
+sqlite_db.initialize_db()
 
 
 class LitteringPipeline:
@@ -137,6 +141,9 @@ class LitteringPipeline:
         For each confirmed littering event:
         1. Create a subfolder with date-time in violation/
         2. Save the violation frame and cropped face inside it
+        3. Run DeepFace recognition on the cropped face
+        4. Query SQLite for person details using FAISS ID
+        5. Send an email notification
         """
         for event in events:
             timestamp = time_module.strftime("%Y-%m-%d_%H-%M-%S", time_module.localtime(event.timestamp))
@@ -151,13 +158,35 @@ class LitteringPipeline:
             print(f"[Pipeline] Violation frame saved: {frame_path}")
 
             # ── Crop the violator's face ──────────────────────────
-            self._crop_violator_face(frame, event, event_dir)
+            face_path = self._crop_violator_face(frame, event, event_dir)
 
-    def _crop_violator_face(self, frame, event: LitteringEvent, event_dir: str):
+            # ── Face Recognition & Emailing ─────────────────────────
+            if face_path and os.path.exists(face_path):
+                print(f"[Pipeline] Running recognition on {face_path}...")
+                faiss_id, similarity = deepface_recognition.recognize_face(face_path)
+                
+                if faiss_id is not None:
+                    person_details = sqlite_db.get_person_by_faiss_id(faiss_id)
+                    if person_details:
+                        name = person_details['name']
+                        email = person_details['email']
+                        print(f"[Pipeline] Identified violator: {name} ({email})")
+                        
+                        # Send email (attaching the violation frame, not the cropped face)
+                        emailer.send_violation_email(email, name, frame_path)
+                    else:
+                        print(f"[Pipeline] FAISS ID {faiss_id} found, but no matching record in SQLite.")
+                else:
+                    print(f"[Pipeline] Face not recognized in database (Similarity < {config.FACE_SIMILARITY_THRESHOLD}). Logged.")
+            else:
+                print(f"[Pipeline] No valid face image to run recognition on.")
+
+    def _crop_violator_face(self, frame, event: LitteringEvent, event_dir: str) -> str:
         """
         Extract the face of the person involved in the violation.
         Uses the person's last known bounding box to narrow down the search area,
         then runs MediaPipe face detection within that region.
+        Returns the path to the saved face crop (or fallback image).
         """
         h, w = frame.shape[:2]
 
@@ -175,7 +204,7 @@ class LitteringPipeline:
 
         if person_region.size == 0:
             print(f"[Pipeline] No valid person region for face crop")
-            return
+            return None
 
         # Run MediaPipe face detection on the person region
         rgb_region = cv2.cvtColor(person_region, cv2.COLOR_BGR2RGB)
@@ -200,12 +229,13 @@ class LitteringPipeline:
             face_crop = person_region[fy1:fy2, fx1:fx2]
             if face_crop.size == 0:
                 print(f"[Pipeline] Face crop is empty")
-                return
+                return None
 
             face_crop = cv2.resize(face_crop, (256, 256))
             face_path = os.path.join(event_dir, "face.jpg")
             cv2.imwrite(face_path, face_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
             print(f"[Pipeline] Violator face saved: {face_path}")
+            return face_path
         else:
             print(f"[Pipeline] No face detected for Person #{event.person_id} — saving person region instead")
             if event.person_last_bbox is not None:
@@ -213,6 +243,9 @@ class LitteringPipeline:
                 fallback_path = os.path.join(event_dir, "face.jpg")
                 cv2.imwrite(fallback_path, fallback, [cv2.IMWRITE_JPEG_QUALITY, 95])
                 print(f"[Pipeline] Person region saved as fallback: {fallback_path}")
+                return fallback_path
+        
+        return None
 
     def draw_annotations(self, frame) -> np.ndarray:
         """

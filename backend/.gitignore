@@ -6,3 +6,4 @@ __pycache__/
 videos/
 garbage_detected/
 violation/
+data_to_upload/
