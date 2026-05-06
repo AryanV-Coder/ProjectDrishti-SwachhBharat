@@ -6,3 +6,4 @@ uvicorn
 ultralytics
 numpy<2
 scipy
+mediapipe

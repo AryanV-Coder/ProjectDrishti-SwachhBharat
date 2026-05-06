@@ -9,14 +9,19 @@ import os
 import time as time_module
 from typing import Dict, List
 
+import mediapipe as mp
+
 from detector import ObjectDetector
 from tracker import CentroidTracker, TrackedObject
 from littering_detector import LitteringDetector, LitteringEvent
 import config
 
-# Create output folder for garbage evidence
-GARBAGE_OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "garbage_detected")
+# Create output folders
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+GARBAGE_OUTPUT_DIR = os.path.join(BASE_DIR, "garbage_detected")
+VIOLATION_OUTPUT_DIR = os.path.join(BASE_DIR, "violation")
 os.makedirs(GARBAGE_OUTPUT_DIR, exist_ok=True)
+os.makedirs(VIOLATION_OUTPUT_DIR, exist_ok=True)
 
 
 class LitteringPipeline:
@@ -39,6 +44,12 @@ class LitteringPipeline:
         )
         self.dustbin_tracker = CentroidTracker()
         self.littering_detector = LitteringDetector()
+
+        # MediaPipe face detector for violation face crops
+        mp_face = mp.solutions.face_detection
+        self.face_detector = mp_face.FaceDetection(
+            model_selection=1, min_detection_confidence=0.5
+        )
 
         # Store latest tracking results for annotation
         self.tracked_persons: Dict[int, TrackedObject] = {}
@@ -89,9 +100,10 @@ class LitteringPipeline:
 
         self.all_events.extend(self.latest_events)
 
-        # 5. Save cropped garbage images for confirmed events
+        # 5. Save evidence for confirmed events
         if self.latest_events:
             self._save_garbage_crops(frame, self.latest_events)
+            self._save_violation_evidence(frame, self.latest_events)
 
         return self.latest_events
 
@@ -119,6 +131,88 @@ class LitteringPipeline:
 
             cv2.imwrite(filepath, crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
             print(f"[Pipeline] Garbage evidence saved: {filepath}")
+
+    def _save_violation_evidence(self, frame, events: List[LitteringEvent]):
+        """
+        For each confirmed littering event:
+        1. Create a subfolder with date-time in violation/
+        2. Save the violation frame and cropped face inside it
+        """
+        for event in events:
+            timestamp = time_module.strftime("%Y-%m-%d_%H-%M-%S", time_module.localtime(event.timestamp))
+            folder_name = f"{timestamp}"
+            event_dir = os.path.join(VIOLATION_OUTPUT_DIR, folder_name)
+            os.makedirs(event_dir, exist_ok=True)
+
+            # ── Save full annotated frame ─────────────────────────
+            annotated = self.draw_annotations(frame)
+            frame_path = os.path.join(event_dir, "violation.jpg")
+            cv2.imwrite(frame_path, annotated, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            print(f"[Pipeline] Violation frame saved: {frame_path}")
+
+            # ── Crop the violator's face ──────────────────────────
+            self._crop_violator_face(frame, event, event_dir)
+
+    def _crop_violator_face(self, frame, event: LitteringEvent, event_dir: str):
+        """
+        Extract the face of the person involved in the violation.
+        Uses the person's last known bounding box to narrow down the search area,
+        then runs MediaPipe face detection within that region.
+        """
+        h, w = frame.shape[:2]
+
+        # Use person's bounding box if available, otherwise search full frame
+        if event.person_last_bbox is not None:
+            px1, py1, px2, py2 = event.person_last_bbox
+            pad = 30
+            px1 = max(0, px1 - pad)
+            py1 = max(0, py1 - pad)
+            px2 = min(w, px2 + pad)
+            py2 = min(h, py2 + pad)
+            person_region = frame[py1:py2, px1:px2]
+        else:
+            person_region = frame
+
+        if person_region.size == 0:
+            print(f"[Pipeline] No valid person region for face crop")
+            return
+
+        # Run MediaPipe face detection on the person region
+        rgb_region = cv2.cvtColor(person_region, cv2.COLOR_BGR2RGB)
+        results = self.face_detector.process(rgb_region)
+
+        if results.detections:
+            detection = results.detections[0]
+            bbox = detection.location_data.relative_bounding_box
+
+            rh, rw = person_region.shape[:2]
+            fx = int(bbox.xmin * rw)
+            fy = int(bbox.ymin * rh)
+            fw = int(bbox.width * rw)
+            fh = int(bbox.height * rh)
+
+            face_pad = int(0.25 * fw)
+            fx1 = max(0, fx - face_pad)
+            fy1 = max(0, fy - face_pad)
+            fx2 = min(rw, fx + fw + face_pad)
+            fy2 = min(rh, fy + fh + face_pad)
+
+            face_crop = person_region[fy1:fy2, fx1:fx2]
+            if face_crop.size == 0:
+                print(f"[Pipeline] Face crop is empty")
+                return
+
+            face_crop = cv2.resize(face_crop, (256, 256))
+            face_path = os.path.join(event_dir, "face.jpg")
+            cv2.imwrite(face_path, face_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            print(f"[Pipeline] Violator face saved: {face_path}")
+        else:
+            print(f"[Pipeline] No face detected for Person #{event.person_id} — saving person region instead")
+            if event.person_last_bbox is not None:
+                fallback = cv2.resize(person_region, (256, 256))
+                fallback_path = os.path.join(event_dir, "face.jpg")
+                cv2.imwrite(fallback_path, fallback, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                print(f"[Pipeline] Person region saved as fallback: {fallback_path}")
 
     def draw_annotations(self, frame) -> np.ndarray:
         """
