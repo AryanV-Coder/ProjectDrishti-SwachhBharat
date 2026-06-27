@@ -1,0 +1,12 @@
+opencv-python
+deepface
+ipykernel
+fastapi
+uvicorn
+ultralytics
+numpy<2
+scipy
+mediapipe
+deepface
+faiss-cpu
+python-dotenv

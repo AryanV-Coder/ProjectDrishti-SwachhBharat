@@ -1,0 +1,9 @@
+.DS_Store
+*.env
+venv/
+__pycache__/
+*.mp4
+videos/
+garbage_detected/
+violation/
+data_to_upload/
