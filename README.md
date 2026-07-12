@@ -6,7 +6,7 @@
 
 > AI-Powered Littering Detection, Violator Identification & Automated Penalty System
 
-**[🎥 See the Live Demo Here!](https://drive.google.com/file/d/1DsdMDOpNsNDCIIkZ-i0hOZVK5RwnV_Nu/view)**
+**[🎥 See the Demo Video Here!](https://drive.google.com/file/d/1DsdMDOpNsNDCIIkZ-i0hOZVK5RwnV_Nu/view)**
 
 ## 📖 Project Overview
 
