@@ -1,14 +1,20 @@
 # 🇮🇳 Project Drishti — SwachhBharat
 
+[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Status: Active](https://img.shields.io/badge/status-active-success.svg)](#)
+
 > AI-Powered Littering Detection, Violator Identification & Automated Penalty System
 
-## Project Overview
+**[🎥 See the Live Demo Here!](https://drive.google.com/file/d/1DsdMDOpNsNDCIIkZ-i0hOZVK5RwnV_Nu/view)**
+
+## 📖 Project Overview
 
 Project Drishti is an end-to-end AI surveillance pipeline that detects littering in real-time using computer vision, identifies the violator through facial recognition, and automatically dispatches an e-challan (fine notice) via email — all without human intervention.
 
 ---
 
-## System Architecture
+## 🏗️ System Architecture
 
 ### End-to-End Pipeline
 
@@ -117,7 +123,7 @@ stateDiagram-v2
 
 ---
 
-## Key Features
+## ✨ Key Features
 
 | Feature | Description |
 |---|---|
@@ -132,7 +138,7 @@ stateDiagram-v2
 
 ---
 
-## Tech Stack
+## 💻 Tech Stack
 
 | Layer | Technology |
 |---|---|
@@ -147,7 +153,7 @@ stateDiagram-v2
 
 ---
 
-## Project Structure
+## 📂 Project Structure
 
 ```
 ProjectDrishti_SwachhBharat/
@@ -178,7 +184,7 @@ ProjectDrishti_SwachhBharat/
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
 ### 1. Install Dependencies
 ```bash
@@ -217,6 +223,6 @@ python main_video.py --source videos/test.mp4
 
 ---
 
-## Contributing to a Cleaner India
+## 🇮🇳 Contributing to a Cleaner India
 
-This project supports the **Swachh Bharat (Clean India)** initiative by leveraging AI to enforce cleanliness standards and deter public littering through automated monitoring and penalties.
+This project supports the **Swachh Bharat (Clean India)** initiative by leveraging AI to enforce cleanliness standards and deter public littering through automated monitoring and penalties. We welcome contributions to make our surroundings cleaner and greener!
